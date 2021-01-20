@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <fstream>
 #include <cstdlib>
 #include <iomanip>
 #include <locale>
@@ -53,7 +54,7 @@ std::vector<size_t> benchmark_task(const size_t size, const bool use_std_sort, c
 }
 
 
-int benchmark(size_t size, size_t number_worker, const bool use_std_sort){
+double benchmark(size_t size, size_t number_worker, const bool use_std_sort){
     std::vector<size_t> results;
     results.reserve(number_worker * MEASUREMENTS);
     std::vector<std::future<std::vector<size_t>>> benchmark_tasks;
@@ -66,7 +67,7 @@ int benchmark(size_t size, size_t number_worker, const bool use_std_sort){
         const auto task_result = task.get();
         results.insert(results.end(), task_result.begin(), task_result.end());
     }
-    boost::accumulators::accumulator_set<size_t, boost::accumulators::stats<boost::accumulators::tag::median>> accumulator;
+    boost::accumulators::accumulator_set<double, boost::accumulators::stats<boost::accumulators::tag::median>> accumulator;
     
     for (auto result : results) {
         accumulator(result);
@@ -74,9 +75,8 @@ int benchmark(size_t size, size_t number_worker, const bool use_std_sort){
 
     auto median = boost::accumulators::median(accumulator);
 
-    // std::cout << "  -> Sorted vector with " << size << " elements in " << median << "[ms] (median of " << number_worker << " workers)" << std::endl;
-    std::cout << "\"" << (use_std_sort ? "std" : "boost") << "\"," << number_worker << "," << MEASUREMENTS << "," << size << "," << median << std::endl;
-    // std::cout << std::endl;
+    std::cout << "  -> Sorted vector with " << size << " elements in " << median << "[ms] (median of " << number_worker << " workers)" << std::endl;
+    std::cout << std::endl;
     return median;
 }
 
@@ -86,13 +86,18 @@ int main(int argc, char const *argv[]){
     // // std::vector<size_t> vector_sizes{ 10'000, 100'000, 500'000, 1'000'000, 5'000'000, 10'000'000, 50'000'000, 100'000'000 };
 
     std::vector<size_t> vector_sizes{2'000, 4'000, 6'000, 8'000, 10'000, 12'000}; // Should cover the range around 32k L1 caches
-    std::vector<size_t> vector_sizes_large{16'000, 32'000, 64'000, 128'000, 256'000, 512'000, 1'000'000}; // 500k should even be too large for 1MB L2 server caches
+    std::vector<size_t> vector_sizes_large{16'000, 32'000, 64'000, 128'000, 256'000, 512'000, 1'024'000, 2'048'000}; // 500k should even be too large for 1MB L2 server caches
     vector_sizes.insert(vector_sizes.end(), vector_sizes_large.begin(), vector_sizes_large.end());
+
     std::vector<size_t> number_workers{ 1, 2, 4, 8, 16, 32 };
     // std::vector<size_t> number_workers{ 2, 4, 8 };
 
-    std::vector<std::vector<int>> results;
+    std::vector<std::vector<double>> results;
     results.reserve(number_workers.size());
+
+    std::fstream csv_file;
+    csv_file.open("results.csv", std::ios_base::out);
+    csv_file << "IMPLEMENTATION,THREAD_COUNT,MEASUREMENTS,SIZE,MEDIAN_RUNTIME_MUS" << std::endl;
 
     const char separator = ' ';
     const int numWidth = 20;
@@ -103,10 +108,14 @@ int main(int argc, char const *argv[]){
         for (int z = 0; z < vector_sizes.size(); z++) {
             for (const auto use_std_sort : {true, false}) {
                 // std::cout << "- Run benchmark with " << number_workers[i] << " worker" << " and a vector of size " <<  vector_sizes[z] << " :" << std::endl;
-                results[i][z] = benchmark(vector_sizes[z], number_workers[i], use_std_sort);
+                const auto result = benchmark(vector_sizes[z], number_workers[i], use_std_sort);
+                results[i][z] = result;
+
+                csv_file << "\"" << (use_std_sort ? "std" : "boost") << "\"," << number_workers[i] << "," << MEASUREMENTS << "," << vector_sizes[z] << "," << result << std::endl;
             }
         }
     }
+    csv_file.close();
     std::cout << std::endl;
     std::cout << std::left << std::setw(numWidth + 2) << std::setfill(separator) << "Size";
     for (int i = 0; i < number_workers.size(); i++) {
