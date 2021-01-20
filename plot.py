@@ -6,11 +6,13 @@ import matplotlib.pyplot as plt
 
 import cpuinfo
 
-df = pd.read_csv('rel/results.csv')
-
 
 l2_cache_size_bytes = cpuinfo.get_cpu_info()['l2_cache_line_size'] * 1000
 values_per_l2 = l2_cache_size_bytes / 4
+
+cpu_brand = cpuinfo.get_cpu_info()['brand_raw'].replace(' ', '').replace('@', '').replace('(', '').replace(')', '').replace('.', '_')
+
+df = pd.read_csv('rel/results.csv')
 
 for measurement in ['small', 'large', 'all']:
 	df_filtered = df.copy()
@@ -34,5 +36,5 @@ for measurement in ['small', 'large', 'all']:
 	g.map_dataframe(sns.lineplot, x="SIZE", y="MEDIAN_RUNTIME_MUS", hue="IMPLEMENTATION")
 	g.set_axis_labels("Input size", "Runtime [microseconds]")
 	g.add_legend()
-	plt.savefig(f'plot_{measurement}.pdf')
+	plt.savefig(f'{cpu_brand}__plot_{measurement}.pdf')
 
